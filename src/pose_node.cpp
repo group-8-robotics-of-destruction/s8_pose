@@ -7,7 +7,7 @@
 #include <s8_utils/math.h>
 #include <geometry_msgs/PoseStamped.h>
 
-#define HZ                  50
+#define HZ                  10
 
 using namespace s8::pose_node;
 using namespace s8::utils::math;
