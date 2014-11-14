@@ -4,11 +4,13 @@
 
 #include <s8_common_node/Node.h>
 #include <s8_pose/pose_node.h>
+#include <s8_utils/math.h>
 #include <geometry_msgs/PoseStamped.h>
 
-#define HZ                  10
+#define HZ                  50
 
 using namespace s8::pose_node;
+using namespace s8::utils::math;
 
 class Pose : public s8::Node {
     ros::Publisher pose_publisher;
@@ -34,15 +36,12 @@ public:
         pose.pose.position.x = x;
         pose.pose.position.y = 0;
         pose.pose.position.z = z;
-        pose.pose.orientation.x = 0;
-        pose.pose.orientation.z = 0;
-        pose.pose.orientation.w = 0;
 
         switch(front_facing) {
-            case FrontFacing::NORTH: pose.pose.orientation.y = 1/4; break;
-            case FrontFacing::SOUTH: pose.pose.orientation.y = -1/4; break;
-            case FrontFacing::EAST: pose.pose.orientation.y = 1/4; break;
-            case FrontFacing::WEST: pose.pose.orientation.y = -1/4; break;
+            case FrontFacing::NORTH: pose.pose.orientation = degrees_to_quaternion(0); break;
+            case FrontFacing::EAST: pose.pose.orientation = degrees_to_quaternion(90); break;
+            case FrontFacing::SOUTH: pose.pose.orientation = degrees_to_quaternion(180); break;
+            case FrontFacing::WEST: pose.pose.orientation = degrees_to_quaternion(270); break;
         }
 
         pose_publisher.publish(pose);
