@@ -22,7 +22,7 @@ public:
     Pose() : x(0.0), z(0.0), front_facing(FrontFacing::NORTH) {
         init_params();
         print_params();
-        pose_publisher = nh.advertise<geometry_msgs::PoseStamped>(TOPIC_POSE, 1);
+        pose_publisher = nh.advertise<geometry_msgs::PoseStamped>(TOPIC_POSE, 1, true); //Latch messages.
     }
 
     void update() {
