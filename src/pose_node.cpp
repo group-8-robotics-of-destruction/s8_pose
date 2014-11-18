@@ -57,10 +57,10 @@ public:
 private:
     int front_facing_to_degrees(FrontFacing) {
         switch(front_facing) {
-            case FrontFacing::NORTH: return 0;
-            case FrontFacing::EAST: return 90;
-            case FrontFacing::SOUTH: 180;
-            case FrontFacing::WEST: return 270;
+            case FrontFacing::NORTH: return 90;
+            case FrontFacing::EAST: return 0;
+            case FrontFacing::SOUTH: return 270;
+            case FrontFacing::WEST: return 180;
         }
     }
 
