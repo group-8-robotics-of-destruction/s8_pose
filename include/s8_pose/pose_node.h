@@ -11,11 +11,20 @@ namespace s8 {
 		const std::string TOPIC_POSE_SIMPLE = 	"/s8/pose_simple";
 
 		enum FrontFacing {
-		    NORTH = 1,
-		    EAST = 1 << 1,
-		    SOUTH = 1 << 2,
-		    WEST = 1 << 3
+		    EAST = 0,
+		    NORTH = 90,
+		    WEST = 180,
+		    SOUTH = 270
 		};
+
+		std::string to_string(FrontFacing front_facing) {
+			switch(front_facing) {
+				case FrontFacing::EAST: return "EAST";
+				case FrontFacing::NORTH: return "NORTH";
+				case FrontFacing::WEST: return "WEST";
+				case FrontFacing::SOUTH: return "SOUTH";
+			}
+		}
 	}
 }
 
