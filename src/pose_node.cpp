@@ -38,7 +38,9 @@ class Pose : public s8::Node {
     double x, y, theta;
     double velocity;
     double wheel_radius, robot_base;
+    double encoder_left, encoder_right;
     double tick_dist;
+    bool isEncoderInitialized;
 
     FrontFacing front_facing;
 
@@ -50,14 +52,15 @@ public:
         pose_simple_publisher = nh.advertise<geometry_msgs::Pose2D>(TOPIC_POSE_SIMPLE, 1);
         actual_twist_subscriber = nh.subscribe<geometry_msgs::Twist>(TOPIC_ACTUAL_TWIST, 1, &Pose::actual_twist_callback, this);
         turn_action_result_subscriber = nh.subscribe<s8_turner::TurnActionResult>(TOPIC_TURN_ACTION_RESULT, 100, &Pose::turn_action_result_callback, this);
-        //encoder_subscriber = nh.subscribe<ras_arduino_msgs::Encoders>(TOPIC_ENCODERS, 1, &Pose::encoders_callback, this);
+        encoder_subscriber = nh.subscribe<ras_arduino_msgs::Encoders>(TOPIC_ENCODERS, 1, &Pose::encoders_callback, this);
 
         velocity = 0.0;
         x = 0.0;
         y = 0.0;
+        encoder_left = encoder_right = 0.0;
         theta = degrees_to_radians((double)front_facing_to_degrees(front_facing));
         tick_dist = 2*wheel_radius*M_PI/360;
-
+        isEncoderInitialized = false;
         ROS_INFO("Robot is facing %s", to_string(front_facing).c_str());
     }
 
@@ -101,7 +104,7 @@ private:
             ROS_INFO("Linear velocity. %lf Sending pose.", velocity);
 
             double distance = velocity / HZ;
-
+/*
             switch(front_facing) {
                 case FrontFacing::EAST: x += distance; break;
                 case FrontFacing::NORTH: y += distance; break;
@@ -110,21 +113,50 @@ private:
             }
 
             publish_pose();
+*/
         }
     }
 
     void encoders_callback(const ras_arduino_msgs::Encoders::ConstPtr & encoders) {
-        // if(velocity == 0)
-        //     return;
+
+        if (isEncoderInitialized == false)
+        {
+            isEncoderInitialized = true;
+            encoder_left = encoders->encoder2;
+            encoder_right = encoders->encoder1;
+            return;
+        }
+        /*
+        if(velocity == 0)
+        {
+            isEncoderInitialized = false;
+            ROS_INFO("initialized false");
+            return;
+        }
+        */
         ROS_INFO("encoders x: %lf, y: %lf", x, y);
 
-        int delta_left = encoders->delta_encoder2;
-        int delta_right = encoders->delta_encoder1;
+        int current_left = encoders->encoder2;
+        int current_right = encoders->encoder1;
+
+
+        int delta_left = -delta(encoder_left, current_left);
+        int delta_right = -delta(encoder_right, current_right);
+
+
+
+        //if (delta_left > 50 || delta_right > 50)
+        //    return;
+
+        encoder_left = current_left;
+        encoder_right = current_right;
 
         double delta_wheel_diff = delta_right*tick_dist-delta_left*tick_dist;
         double delta_theta = delta_wheel_diff/robot_base;
 
-        double delta_dist  = delta_wheel_diff/2;
+        double delta_wheel_sum = delta_right*tick_dist+delta_left*tick_dist;
+        ROS_INFO("delta_left: %d, delta_right: %d", delta_left, delta_right);
+        double delta_dist  = delta_wheel_sum/2;
         double delta_x = delta_dist * std::cos(theta + delta_theta/2);
         double delta_y = delta_dist * std::sin(theta + delta_theta/2);
 
@@ -135,6 +167,15 @@ private:
         theta = theta + delta_theta;
 
         publish_pose();
+    }
+
+    int delta(int previous, int current){
+        int diff = previous - current;
+        if (diff > 60000)
+            diff = 65536 - diff;
+        else if (diff < -60000)
+            diff = -65536 - diff;
+        return diff;
     }
 
     void turn_action_result_callback(const s8_turner::TurnActionResult::ConstPtr & turn_action_result) {
@@ -148,7 +189,8 @@ private:
             } else if(degrees_turnt > 0) {
                 front_facing = plus_90_degrees(front_facing);
             }
-            theta = degrees_to_radians((double)front_facing_to_degrees(front_facing));
+            //theta = degrees_to_radians((double)front_facing_to_degrees(front_facing));
+            //isEncoderInitialized = false;
 
             ROS_INFO("Robot is now facing %s", to_string(front_facing).c_str());
         } else {
