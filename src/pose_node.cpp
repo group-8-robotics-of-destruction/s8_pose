@@ -50,7 +50,7 @@ public:
         pose_simple_publisher = nh.advertise<geometry_msgs::Pose2D>(TOPIC_POSE_SIMPLE, 1);
         actual_twist_subscriber = nh.subscribe<geometry_msgs::Twist>(TOPIC_ACTUAL_TWIST, 1, &Pose::actual_twist_callback, this);
         turn_action_result_subscriber = nh.subscribe<s8_turner::TurnActionResult>(TOPIC_TURN_ACTION_RESULT, 100, &Pose::turn_action_result_callback, this);
-        encoder_subscriber = nh.subscribe<ras_arduino_msgs::Encoders>(TOPIC_ENCODERS, 1, &Pose::encoders_callback, this);
+        //encoder_subscriber = nh.subscribe<ras_arduino_msgs::Encoders>(TOPIC_ENCODERS, 1, &Pose::encoders_callback, this);
 
         velocity = 0.0;
         x = 0.0;
@@ -63,7 +63,7 @@ public:
 
     void update() {
         publish_rviz_pose();
-        publish_pose();
+        //publish_pose();
     }
 
     void publish_rviz_pose() {
@@ -109,13 +109,14 @@ private:
                 case FrontFacing::SOUTH: y -= distance; break;
             }
 
-            //publish_pose();
+            publish_pose();
         }
     }
 
     void encoders_callback(const ras_arduino_msgs::Encoders::ConstPtr & encoders) {
-        if(velocity == 0)
-            return;
+        // if(velocity == 0)
+        //     return;
+        ROS_INFO("encoders x: %lf, y: %lf", x, y);
 
         int delta_left = encoders->delta_encoder2;
         int delta_right = encoders->delta_encoder1;
@@ -126,6 +127,8 @@ private:
         double delta_dist  = delta_wheel_diff/2;
         double delta_x = delta_dist * std::cos(theta + delta_theta/2);
         double delta_y = delta_dist * std::sin(theta + delta_theta/2);
+
+        ROS_INFO("delta_x: %lf, delta_y: %lf", delta_x, delta_y);
 
         x = x + delta_x;
         y = y + delta_y;
