@@ -4,19 +4,18 @@
 
 #include <s8_common_node/Node.h>
 #include <s8_motor_controller/motor_controller_node.h>
-#include <s8_turner/turner_node.h>
 #include <s8_pose/pose_node.h>
 #include <s8_utils/math.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Pose2D.h>
 #include <geometry_msgs/Twist.h>
-#include <s8_turner/TurnActionResult.h>
 #include <ras_arduino_msgs/Encoders.h>
+#include <s8_pose/setPosition.h>
+#include <s8_pose/setOrientation.h>
 
 #define HZ                  10
 
 #define TOPIC_ACTUAL_TWIST          s8::motor_controller_node::TOPIC_ACTUAL_TWIST
-#define TOPIC_TURN_ACTION_RESULT    s8::turner_node::ACTION_TURN + "/result"
 #define TOPIC_ENCODERS              s8::motor_controller_node::TOPIC_ENCODERS
 
 #define PARAM_NAME_WHEEL_RADIUS                     "wheel_radius"
@@ -24,6 +23,11 @@
 
 #define PARAM_DEFAULT_WHEEL_RADIUS                  0.05
 #define PARAM_DEFAULT_ROBOT_BASE                    0.215
+
+#define TOPO_EAST           7 * M_PI / 4
+#define TOPO_NORTH          1 * M_PI / 4
+#define TOPO_WEST           3 * M_PI / 4
+#define TOPO_SOUTH          5 * M_PI / 4
 
 using namespace s8::pose_node;
 using namespace s8::utils::math;
@@ -44,6 +48,9 @@ class Pose : public s8::Node {
 
     FrontFacing front_facing;
 
+    ros::ServiceServer set_orientation_service;
+    ros::ServiceServer set_position_service;
+
 public:
     Pose() : x(0.0), y(0.0), front_facing(FrontFacing::EAST) {
         init_params();
@@ -51,7 +58,6 @@ public:
         pose_publisher = nh.advertise<geometry_msgs::PoseStamped>(TOPIC_POSE, 1);
         pose_simple_publisher = nh.advertise<geometry_msgs::Pose2D>(TOPIC_POSE_SIMPLE, 1);
         actual_twist_subscriber = nh.subscribe<geometry_msgs::Twist>(TOPIC_ACTUAL_TWIST, 1, &Pose::actual_twist_callback, this);
-        turn_action_result_subscriber = nh.subscribe<s8_turner::TurnActionResult>(TOPIC_TURN_ACTION_RESULT, 100, &Pose::turn_action_result_callback, this);
         encoder_subscriber = nh.subscribe<ras_arduino_msgs::Encoders>(TOPIC_ENCODERS, 1, &Pose::encoders_callback, this);
 
         velocity = 0.0;
@@ -62,6 +68,9 @@ public:
         tick_dist = 2*wheel_radius*M_PI/360;
         isEncoderInitialized = false;
         ROS_INFO("Robot is facing %s", to_string(front_facing).c_str());
+
+        set_orientation_service = nh.advertiseService(SERVICE_SET_ORIENTATION, &Pose::set_orientation_callback, this);
+        set_position_service = nh.advertiseService(SERVICE_SET_POSITION, &Pose::set_position_callback, this);
     }
 
     void update() {
@@ -101,7 +110,7 @@ private:
 
         if(!is_zero(velocity)) {
             //Moving forward. Then send pose.
-            ROS_INFO("Linear velocity. %lf Sending pose.", velocity);
+            //ROS_INFO("Linear velocity. %lf Sending pose.", velocity);
 
             double distance = velocity / HZ;
 /*
@@ -134,7 +143,7 @@ private:
             return;
         }
         */
-        ROS_INFO("encoders x: %lf, y: %lf", x, y);
+        //ROS_INFO("encoders x: %lf, y: %lf", x, y);
 
         int current_left = encoders->encoder2;
         int current_right = encoders->encoder1;
@@ -155,12 +164,12 @@ private:
         double delta_theta = delta_wheel_diff/robot_base;
 
         double delta_wheel_sum = delta_right*tick_dist+delta_left*tick_dist;
-        ROS_INFO("delta_left: %d, delta_right: %d", delta_left, delta_right);
+        //ROS_INFO("delta_left: %d, delta_right: %d", delta_left, delta_right);
         double delta_dist  = delta_wheel_sum/2;
         double delta_x = delta_dist * std::cos(theta + delta_theta/2);
         double delta_y = delta_dist * std::sin(theta + delta_theta/2);
 
-        ROS_INFO("delta_x: %lf, delta_y: %lf", delta_x, delta_y);
+        //ROS_INFO("delta_x: %lf, delta_y: %lf", delta_x, delta_y);
 
         x = x + delta_x;
         y = y + delta_y;
@@ -176,26 +185,6 @@ private:
         else if (diff < -60000)
             diff = -65536 - diff;
         return diff;
-    }
-
-    void turn_action_result_callback(const s8_turner::TurnActionResult::ConstPtr & turn_action_result) {
-        int status = turn_action_result->status.status;
-        int degrees_turnt = turn_action_result->result.degrees;
-
-        if(status == 3) { //Success
-            ROS_INFO("Robot has turnt %d degrees", degrees_turnt);
-            if(degrees_turnt < 0) {
-                front_facing = minus_90_degrees(front_facing);
-            } else if(degrees_turnt > 0) {
-                front_facing = plus_90_degrees(front_facing);
-            }
-            //theta = degrees_to_radians((double)front_facing_to_degrees(front_facing));
-            //isEncoderInitialized = false;
-
-            ROS_INFO("Robot is now facing %s", to_string(front_facing).c_str());
-        } else {
-            ROS_WARN("Warning. Turner didn't succeed. Now assuming the robot hasnt moved.");
-        }
     }
 
     int front_facing_to_degrees(FrontFacing front_facing) {
@@ -218,6 +207,39 @@ private:
             case FrontFacing::WEST: return FrontFacing::SOUTH;
             case FrontFacing::SOUTH: return FrontFacing::EAST;
         }
+    }
+
+    double get_heading(double theta){
+        double heading = sign(theta) *degrees_to_radians((std::abs((int)radians_to_degrees(theta))%(int)radians_to_degrees(2*M_PI) ));
+
+        if(heading < 0)
+            heading += 2*M_PI;
+
+        if(heading <= TOPO_NORTH || heading > TOPO_EAST) {
+            return 0;
+        }
+        if(heading <= TOPO_WEST && heading > TOPO_NORTH) {
+            return M_PI/2;
+        }
+        if(heading <= TOPO_SOUTH && heading > TOPO_WEST) {
+            return M_PI;
+        }
+        if(heading <= TOPO_EAST && heading > TOPO_SOUTH) {
+            return 3*M_PI/2;
+        }
+    }
+
+    bool set_position_callback(s8_pose::setPosition::Request& request, s8_pose::setPosition::Response& response) {
+        ROS_INFO("Position robot at: (%lf, %lf)", request.x, request.y);
+        x = request.x;
+        y = request.y;
+        return true;
+    }
+
+    bool set_orientation_callback(s8_pose::setOrientation::Request& request, s8_pose::setOrientation::Response& response) {
+        ROS_INFO("Resetting orientation");
+        theta = get_heading(theta);
+        return true;
     }
 
     void init_params() {
