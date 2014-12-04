@@ -237,8 +237,28 @@ private:
     }
 
     bool set_orientation_callback(s8_pose::setOrientation::Request& request, s8_pose::setOrientation::Response& response) {
-        ROS_INFO("Resetting orientation");
-        theta = get_heading(theta);
+        if (request.aligning){
+            theta = get_heading(theta);
+            ROS_INFO("Resetting orientation: ALIGNING");
+        }
+        /*
+        else {
+            double add_to_theta = 0;
+            double wanted_heading = get_heading(theta);
+            if (wanted_heading == 0){
+                add_to_theta = M_PI;
+                wanted_heading = wanted_heading + M_PI;
+            }
+            double heading = sign(theta + add_to_theta) *degrees_to_radians((std::abs((int)radians_to_degrees(theta+add_to_theta))%(int)radians_to_degrees(2*M_PI) ));
+            if(heading < 0)
+                heading += 2*M_PI;
+
+            if ( std::abs(heading - wanted_heading) > M_PI/16 ){
+                theta = get_heading(theta);
+                ROS_INFO("Resetting orientation: FOLLOWING");
+            } 
+        }
+        */
         return true;
     }
 
